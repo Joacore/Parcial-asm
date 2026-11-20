@@ -82,7 +82,7 @@ RESERVA_SIZE                 EQU 0
 ; Funciones externas
 ; ------------------------
 extern unificar
-extern malloc
+;extern malloc
 
 ; ----------------------------------------------------
 ; bool suscribirDisciplina(
@@ -122,36 +122,37 @@ suscribirDisciplina:
         mov R8, [R12 + USUARIO_SUSC_OFFSET] ; usuario->susc
         mov RAX, SUSCRIPCION_SIZE
         mul rbx ; RAX = SUSCRIPCION_SIZE * i
-        mov R9, [R8 + RAX]          ; R9 = susc[i]
-        mov R15, [R9 + SUSCRIPCION_DISCIPLINA_OFFSET] ; R15 = disciplina_t* sus->disciplina
+        add R8, RAX         ; R8 = susc[i]
+        mov R15, [R8 + SUSCRIPCION_DISCIPLINA_OFFSET] ; R15 = disciplina_t* sus->disciplina
 
         mov R10D, DWORD [R15 + DISCIPLINA_ID_OFFSET]  ; R10 = disciplina->id
-        cmp R10D, DWORD [R13 + DISCIPLINA_ID_OFFSET]
+        cmp R10D, DWORD [R13 + DISCIPLINA_ID_OFFSET]  ; disciplina->id == candidata->id?
         je .fin_false
 
-        mov R10, [R15 + + DISCIPLINA_DIAS_OFFSET]
-        mov R11, [R13 + DISCIPLINA_DIAS_OFFSET]
-        and R10, R11
-        cmp R10, 0
+        mov DL, BYTE [R15 + DISCIPLINA_DIAS_OFFSET]  ; DL = disciplina->dias
+        mov CL, BYTE [R13 + DISCIPLINA_DIAS_OFFSET]    ; CL = candidata->dias
+        and DL, CL
+        cmp DL, 0
         je .siguiente
         ; if not equals:
 
-        mov RDI, R15
-        mov RSI, R13
-        call R14
+        mov RDI, R15   ; RDI = disciplina
+        mov RSI, R13   ; RSI = candidata
+        call R14       ; son_unificables
 
         cmp RAX, 0
-        jne .siguiente
-        ; if equals:
+        je .siguiente
+        ; if not equals (true):
         mov RDI, R15
         mov RSI, R13
         call unificar  ; RAX = disciplina_t* unificacion
+        mov R10, RAX
 
         mov R8, [R12 + USUARIO_SUSC_OFFSET] ; usuario->susc
         mov RAX, SUSCRIPCION_SIZE
         mul rbx ; RAX = SUSCRIPCION_SIZE * i
-        mov R9, [R8 + RAX]          ; R9 = susc[i]
-        mov QWORD [R9 + SUSCRIPCION_DISCIPLINA_OFFSET], RAX ;usuario->suscripciones[i].disciplina = unificacion;
+        add R8, RAX          ; R8 = susc[i]
+        mov QWORD [R8 + SUSCRIPCION_DISCIPLINA_OFFSET], R10 ;usuario->suscripciones[i].disciplina = unificacion;
         jmp .fin_true
 
         .siguiente:
@@ -164,13 +165,13 @@ suscribirDisciplina:
         jge .fin_false
         ; if less:
 
-        mov RDI, SUSCRIPCION_SIZE
-        call malloc
-        mov R15, RAX  ; R15 =  suscripcion_t* nueva_suscripcion
+        ; mov RDI, SUSCRIPCION_SIZE
+        ; call malloc
+        ; mov R15, RAX  ; R15 =  suscripcion_t* nueva_suscripcion
 
-        mov BYTE [R15 + SUSCRIPCION_ACTIVA_OFFSET], 1        ; nueva_suscripcion->activa = 1
-        mov QWORD [R15 + SUSCRIPCION_DISCIPLINA_OFFSET], R13 ; nueva_suscripcion->disciplina = candidata
-        mov WORD [R15 + SUSCRIPCION_SEMANAS_OFFSET], 4       ; nueva_suscripcion->semanas_restantes = 4
+        ; mov BYTE [R15 + SUSCRIPCION_ACTIVA_OFFSET], 1        ; nueva_suscripcion->activa = 1
+        ; mov QWORD [R15 + SUSCRIPCION_DISCIPLINA_OFFSET], R13 ; nueva_suscripcion->disciplina = candidata
+        ; mov WORD [R15 + SUSCRIPCION_SEMANAS_OFFSET], 4       ; nueva_suscripcion->semanas_restantes = 4
 
 
         mov R11D, DWORD [R12 + USUARIO_CANT_SUSC_OFFSET] ; R11D = cant_suscripciones
@@ -178,14 +179,16 @@ suscribirDisciplina:
         mov RAX, SUSCRIPCION_SIZE           
         mul R11D ; RAX = SUSCRIPCION_SIZE * cant_suscripciones
         
-        mov R9, [R8 + RAX]  ; R9 = usuario->suscripciones[usuario->cant_suscripciones]
+        ; mov R9, [R8 + RAX]  ; R9 = suscripcion_t usuario->suscripciones[usuario->cant_suscripciones]  Estaba haciendo mal esto
 
-        mov R10B, BYTE [R15]   
-        mov BYTE [R9], R10B
-        mov R10, QWORD [R15 + SUSCRIPCION_DISCIPLINA_OFFSET]
-        mov QWORD [R9 + SUSCRIPCION_DISCIPLINA_OFFSET], R10
-        mov R10W, WORD [R15 + SUSCRIPCION_SEMANAS_OFFSET]
-        mov WORD [R9 + SUSCRIPCION_SEMANAS_OFFSET], R10W
+       ;  mov R10B, BYTE [R15]   
+        mov BYTE [R8 + RAX], BYTE 1
+        ; mov R10, QWORD [R15 + SUSCRIPCION_DISCIPLINA_OFFSET]
+        mov QWORD [R8 + RAX + SUSCRIPCION_DISCIPLINA_OFFSET], R13
+        ; mov R10W, WORD [R15 + SUSCRIPCION_SEMANAS_OFFSET]
+        mov WORD [R8 + RAX + SUSCRIPCION_SEMANAS_OFFSET], 4
+
+        inc DWORD [R12 + USUARIO_CANT_SUSC_OFFSET]     ; Me olvidé de sumar cant_suscripciones
         jmp .fin_true
 
     .fin_false: 
@@ -194,6 +197,7 @@ suscribirDisciplina:
     .fin_true:
     mov RAX, 1
     .epilogo:
+    add RSP, 8
     pop R15
     pop R14
     pop R13
