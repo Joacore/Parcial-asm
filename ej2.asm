@@ -43,18 +43,18 @@ USUARIO_SIZE              EQU 24
 RUTINA_FASE_OFFSET      EQU 0
 RUTINA_ID_OFFSET        EQU 4
 RUTINA_AJUSTE_OFFSET    EQU 8
-RUTINA_DURACION_OFFSET  EQU 12
-RUTINA_NOMBRE_OFFSET    EQU 16
-RUTINA_CALORIAS_OFFSET  EQU 40
-RUTINA_SIZE             EQU 44
+RUTINA_DURACION_OFFSET  EQU 10
+RUTINA_NOMBRE_OFFSET    EQU 12
+RUTINA_CALORIAS_OFFSET  EQU 34
+RUTINA_SIZE             EQU 36
 
 ; ------------------------
 ; combo_t
 ; ------------------------
 COMBO_RUTINAS_OFFSET    EQU 0
 COMBO_CANT_OFFSET       EQU 8
-COMBO_PUNTAJE_OFFSET    EQU 16
-COMBO_SIZE              EQU 24
+COMBO_PUNTAJE_OFFSET    EQU 12
+COMBO_SIZE              EQU 16
 
 ; ------------------------
 ; solicitud_t & lista_solicitudes_t
@@ -98,7 +98,7 @@ extern free
 ; Argumentos:
 ;   RDI = const rutina_t *catalogo
 ;   ESI = uint32_t cant_catalogo
-;   EDX = const uint32_t *ids_elegidos
+;   RDX = const uint32_t *ids_elegidos 
 ;   ECX = uint32_t cant_elegidos
 ; Retorno:
 ;   RAX = combo_t *
@@ -116,9 +116,9 @@ armarCombo:
     sub RSP, 24
 
     mov R12, RDI   ; R12 = catalogo
-    mov [RBP-48], ESI  ; R13D = cant_catalogo
+    mov [RBP-48], ESI  ; [RBP-48] = cant_catalogo
     mov R13, RDX   ; R13 = ids_elegip *(rutina_t*) $rdxdos
-    mov DWORD [RBP-56], ECX  ; [RBP-8] = cant_elegidos
+    mov DWORD [RBP-56], ECX  ; [RBP-56] = cant_elegidos
 
     xor rbx, rbx
 
@@ -144,7 +144,7 @@ armarCombo:
     mov RSI, COMBO_SIZE
     call calloc
 
-    mov RAX, R14  ; R14 = combo_t* combo
+    mov R14, RAX  ; R14 = combo_t* combo      (LO TENIA AL REVEZ)
     xor R15, R15  ; R15 = cant_rutinas = 0
 
     mov EAX, DWORD [RBP-56]
@@ -156,6 +156,8 @@ armarCombo:
     xor rbx, rbx
     .ciclo:
         cmp ebx, [RBP-48]
+        je .finCiclo
+        cmp ebx, DWORD [RBP-56]   ; (Agrego que si llegue a cant_elegidos termine)
         je .finCiclo
 
         mov EDI, DWORD [R13 + rbx*4]  ;EDI = ids_elegidos[i]
@@ -176,24 +178,24 @@ armarCombo:
         ; IMUL reg: multiplicación con signo → se multiplica con rax
         mov R8B, BYTE [RDX + RUTINA_FASE_OFFSET]
         mov R9W, WORD [RDX + RUTINA_DURACION_OFFSET]
+        xor RAX, RAX  ; RAX = 0                       (AGREGUÉ QUE SE LIMPIE RAX, PENSABA QUE SE LIMPIABA SOLO)
         mov AX, R9W
         mul R8B  ; RAX = fase*rutina
         mov ECX, EAX ; RCX = fase*rutina
 
-        mov R8B, BYTE [RDX + RUTINA_AJUSTE_OFFSET] ; R8B = ajuste
-        mov AL, R8B
-        imul EAX, 10  ; RAX = ajuste*10 (con signo)
+        movsx R8D, BYTE [RDX + RUTINA_AJUSTE_OFFSET] ; R8D = ajuste   (CAMBIO mov POR movsx para extender el signo)
+        imul R8D, R8D, 10  ; R8D = ajuste*10 (con signo)
 
-        add ECX, EAX  ; RCX = fase*rutina + ajuste*10
+        add ECX, R8D  ; RCX = fase*rutina + ajuste*10
 
-        mov DWORD [R14 + COMBO_PUNTAJE_OFFSET], ECX
+        add DWORD [R14 + COMBO_PUNTAJE_OFFSET], ECX  ; (puse mov en vez de add)
 
         inc rbx
         jmp .ciclo
 
     .finCiclo:
     mov [R14 + COMBO_RUTINAS_OFFSET], R10 ; combo->rutinas = puntero_rutinas
-    mov [R14 + COMBO_RUTINAS_OFFSET], R15
+    mov DWORD [R14 + COMBO_CANT_OFFSET], R15D   ; (TENÍA MAL EL NOMBRE DEL OFFSET)
     jmp .fin_returnCombo
 
 
@@ -235,9 +237,7 @@ obtenerRutinaDeCatalogo:
         cmp ebx, R14D
         je .fin_NULL
 
-        mov RAX, RUTINA_SIZE
-        mul rbx ; RAX = rbx * RUTINA_SIZE
-        mov R8D, [R13 + RAX + RUTINA_ID_OFFSET]  ; R8 = catalogo[i].id
+        mov R8D, [R13 + RUTINA_ID_OFFSET]  ; R8 = catalogo[i].id    (AHORA SUMO R13 AL FINAL DE CADA CICLO)
 
         cmp R8D, R12D
         jne .siguiente
@@ -245,6 +245,7 @@ obtenerRutinaDeCatalogo:
         jmp .fin_encontrado 
 
         .siguiente:
+        add R13, RUTINA_SIZE      ; (LE SUMO A R13 RUTINA_SIZE PARA IR TENIENDO catalogo[i] en cada iteracion)
         inc rbx
         jmp .ciclo
     
